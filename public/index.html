@@ -43,7 +43,7 @@
         const params = new URLSearchParams({ limit: 24 });
         if (cursor) params.set("cursor", cursor);
 
-        const res = await fetch(`/api/list?${params.toString()}`);
+        const res = await fetch(`https://imgview-x7j.pages.dev/api/list?'+${params.toString()}`);
         const data = await res.json(); // 这里必须成功解析 JSON
 
         grid.innerHTML = ""; // 清除加载状态
