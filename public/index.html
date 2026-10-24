@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>R2 Picviewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background-color: #111; color: #eee; font-family: sans-serif; }
+    
+    /* 顶部按钮区 */
+    .header { display: flex; justify-content: center; gap: 15px; padding: 20px 0; }
+    button { background: #333; color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; transition: 0.3s;}
+    button:hover { background: #555; }
+    button:disabled { background: #222; color: #666; cursor: not-allowed; }
+
+    /* 图片网格区 */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; padding: 0 20px 40px; }
+    .grid img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 8px; background: #222; transition: transform 0.3s; cursor: pointer; }
+    .grid img:hover { transform: scale(1.05); }
+    
+    /* 加载状态 */
+    .loading { text-align: center; padding: 40px; color: #888; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <button id="prev" disabled>Previous</button>
+    <button id="next">Next</button>
+  </div>
+  <div class="grid" id="grid"></div>
+
+  <script>
+    let cursorStack = [];
+    let currentCursor = null;
+
+    async function loadPage(cursor) {
+      const grid = document.getElementById("grid");
+      grid.innerHTML = "<div class='loading'>正在加载图片...</div>"; // 显示加载状态
+
+      try {
+        const params = new URLSearchParams({ limit: 24 });
+        if (cursor) params.set("cursor", cursor);
+
+        const res = await fetch(`/api/list?${params.toString()}`);
+        const data = await res.json(); // 这里必须成功解析 JSON
+
+        grid.innerHTML = ""; // 清除加载状态
+
+        if (!data.images || data.images.length === 0) {
+          grid.innerHTML = "<div class='loading'>没有更多图片了。</div>";
+          return;
+        }
+
+        // 渲染图片
+        for (const img of data.images) {
+          const el = document.createElement("img");
+          el.src = img.url;
+          el.alt = "Preview";
+          el.loading = "lazy";
+          grid.appendChild(el);
+        }
+
+        // 更新按钮状态
+        currentCursor = data.cursor;
+        document.getElementById("prev").disabled = cursorStack.length === 0;
+        document.getElementById("next").disabled = !data.truncated;
+
+      } catch (error) {
+        console.error("Fetch Pic failed:", error);
+        grid.innerHTML = "<div class='loading'>加载失败，请刷新重试</div>";
+      }
+    }
+
+    // 下一页按钮
+    document.getElementById("next").addEventListener("click", () => {
+      if (!currentCursor) return;
+      cursorStack.push(currentCursor);
+      loadPage(currentCursor);
+    });
+
+    // 上一页按钮
+    document.getElementById("prev").addEventListener("click", () => {
+      if (cursorStack.length === 0) return;
+      cursorStack.pop();
+      const prevCursor = cursorStack.length > 0 ? cursorStack[cursorStack.length - 1] : null;
+      loadPage(prevCursor);
+    });
+
+    // 初始加载
+    loadPage(null);
+  </script>
+</body>
+</html>
