@@ -1,34 +1,64 @@
-// ================= 复制从这里开始 =================
-export async function onRequestGet({ request, env }) {
-  // 1. 获取前端传过来的分页参数 (limit 和 cursor)
-  const url = new URL(request.url);
-  const limit = Math.min(Number(url.searchParams.get("limit")) || 24, 100);
-  const cursor = url.searchParams.get("cursor") || undefined;
+const PUBLIC_BASE = 'https://pub-b994451de7e14631b2da3e507df4557e.r2.dev';
+const IMG_RE = /\.(png|jpe?g|gif|webp|avif)$/i;
 
-  // 2. 尝试从 R2 桶里分页获取数据
-  let listed;
-  try {
-    listed = await env.IMG_BUCKET.list({
-      limit: limit,
-      cursor: cursor,
-    });
-  } catch (err) {
-    return new Response(`R2 List Error: ${err.message}`, { status: 500 });
-  }
-
-  // 3. 过滤出图片文件，并生成正确的公共访问链接
-  const images = listed.objects
-    .filter((o) => /\.(jpg|jpeg|png|gif|webp)$/i.test(o.key))
-    .map((o) => ({
-      key: o.key,
-      url: `https://pub-b994451de7e14631b2da3e507d4f557e.r2.dev/${encodeURIComponent(o.key)}`,
-    }));
-
-  // 4. 返回标准的 JSON 分页数据
-  return Response.json({
-    images: images,
-    truncated: listed.truncated, // 是否还有下一页
-    cursor: listed.truncated ? listed.cursor : undefined, // 下一页的游标
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
   });
 }
-// ================= 复制到这里结束 =================
+
+function toUrl(key) {
+  return `${PUBLIC_BASE}/${key.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+export async function onRequestGet(context) {
+  try {
+    if (!context.env.IMG_BUCKET) {
+      return json({ error: 'R2 binding IMG_BUCKET is not configured' }, 500);
+    }
+
+    const url = new URL(context.request.url);
+    const limit = Math.min(parseInt(url.searchParams.get('limit'), 10) || 24, 100);
+    const cursor = url.searchParams.get('cursor') || undefined;
+    const prefix = url.searchParams.get('prefix') || '';
+
+    const list = await context.env.IMG_BUCKET.list({
+      limit,
+      cursor,
+      prefix,
+      delimiter: '/',
+    });
+
+    const images = list.objects
+      .filter(o => !o.key.endsWith('/') && IMG_RE.test(o.key))
+      .map(o => ({
+        key: o.key,
+        size: o.size,
+        uploaded: o.uploaded,
+        url: toUrl(o.key),
+      }));
+
+    // 为每个子目录取一张封面（目录里的第一张图片）
+    const prefixes = await Promise.all(
+      (list.delimitedPrefixes || []).map(async p => {
+        const sub = await context.env.IMG_BUCKET.list({ prefix: p, limit: 10 });
+        const coverObj = sub.objects.find(o => !o.key.endsWith('/') && IMG_RE.test(o.key));
+        return {
+          prefix: p,
+          name: p.replace(/\/$/, '').split('/').pop(),
+          cover: coverObj ? toUrl(coverObj.key) : null,
+        };
+      })
+    );
+
+    return json({
+      prefixes,
+      images,
+      truncated: list.truncated,
+      cursor: list.truncated ? list.cursor : null,
+    });
+  } catch (err) {
+    return json({ error: String((err && err.message) || err) }, 500);
+  }
+}
