@@ -1,4 +1,4 @@
-const PUBLIC_BASE = 'https://pub-b994451de7e14631b2da3e507df4557e.r2.dev';
+const PUBLIC_BASE = 'https://pub-a6729548ecbb4123a0c9ca9726e9e66f.r2.dev';
 const IMG_RE = /\.(png|jpe?g|gif|webp|avif)$/i;
 
 function json(data, status = 200) {
