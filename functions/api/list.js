@@ -14,8 +14,8 @@ function toUrl(key) {
 
 export async function onRequestGet(context) {
   try {
-    if (!context.env.IMG_BUCKET) {
-      return json({ error: 'R2 binding IMG_BUCKET is not configured' }, 500);
+    if (!context.env.festival) {
+      return json({ error: 'R2 binding festival is not configured' }, 500);
     }
 
     const url = new URL(context.request.url);
@@ -23,7 +23,7 @@ export async function onRequestGet(context) {
     const cursor = url.searchParams.get('cursor') || undefined;
     const prefix = url.searchParams.get('prefix') || '';
 
-    const list = await context.env.IMG_BUCKET.list({
+    const list = await context.env.festival.list({
       limit,
       cursor,
       prefix,
@@ -42,7 +42,7 @@ export async function onRequestGet(context) {
     // 为每个子目录取一张封面（目录里的第一张图片）
     const prefixes = await Promise.all(
       (list.delimitedPrefixes || []).map(async p => {
-        const sub = await context.env.IMG_BUCKET.list({ prefix: p, limit: 10 });
+        const sub = await context.env.festival.list({ prefix: p, limit: 10 });
         const coverObj = sub.objects.find(o => !o.key.endsWith('/') && IMG_RE.test(o.key));
         return {
           prefix: p,
